@@ -1,6 +1,6 @@
 # Verd Programming Language — Architecture & Design
 
-**Verd** is a statically-reasoned, effect-transparent scripting language. It is built from scratch in Rust with zero external dependencies. It is not a clone of Python, C, or any other existing language. Every design decision exists to solve a real, documented problem in modern programming.
+**Verd** is a statically-reasoned, effect-transparent scripting language. I built it from scratch in Rust with zero external dependencies. It's not a clone of Python, C, or any other language — every single design decision exists because I was tired of dealing with specific bugs in modern programming.
 
 ---
 
