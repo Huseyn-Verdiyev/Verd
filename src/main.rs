@@ -6,6 +6,7 @@ mod evaluator;
 mod c_generator;
 mod rust_generator;
 mod resolver;
+mod type_checker;
 
 use lexer::Lexer;
 use parser::Parser;
@@ -13,6 +14,7 @@ use evaluator::Evaluator;
 use c_generator::CGenerator;
 use rust_generator::RustGenerator;
 use resolver::Resolver;
+use type_checker::TypeChecker;
 use std::io::{self, Write};
 use std::process::Command;
 
@@ -48,6 +50,24 @@ fn main() {
             let path = get_path(&args, 2);
             let source = read_file(path);
             println!("{}", generate_c(&source));
+        }
+
+        // verd check <file.verd>  — run type inference and print type summary
+        Some("check") => {
+            let path = get_path(&args, 2);
+            let source = read_file(path);
+            let ast = parse_source(&source);
+            let mut checker = TypeChecker::new();
+            let type_env = checker.check_program(&ast);
+            println!("[verd] Type inference results for: {}", path);
+            println!("───────────────────────────────────────────");
+            let mut names: Vec<&String> = type_env.keys().collect();
+            names.sort();
+            for name in names {
+                println!("  {:20} → {:?}", name, type_env[name]);
+            }
+            println!("───────────────────────────────────────────");
+            println!("[verd] {} variables analyzed.", type_env.len());
         }
 
         // verd (no args) → REPL
