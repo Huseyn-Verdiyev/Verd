@@ -1,1 +1,4 @@
 /target
+*.exe
+*.verd.rs
+*.verd.c
