@@ -93,6 +93,7 @@ impl Parser {
             Token::Flux  => self.parse_flux(),
             Token::Op    => self.parse_op_decl(),
             Token::Cycle => self.parse_cycle(),
+            Token::Use   => self.parse_use(),
             Token::Yield => { self.advance(); let e = self.parse_expr()?; Ok(Expr::Yield(Box::new(e))) }
             Token::Rise  => { self.advance(); let e = self.parse_expr()?; Ok(Expr::Rise(Box::new(e))) }
             Token::Spawn => self.parse_spawn(),
@@ -162,6 +163,30 @@ impl Parser {
         // Body
         let body = self.parse_block()?;
         Ok(Expr::OpDecl { name, params, effects, body })
+    }
+
+    fn parse_use(&mut self) -> Result<Expr, String> {
+        self.advance(); // consume 'use'
+        // Could be: use "./file.verd"  OR  use std.fs
+        let path = match self.current().clone() {
+            Token::Text(s) => { self.advance(); s }
+            Token::Identifier(s) => {
+                // collect dotted path: std.fs.io etc.
+                let mut path = s;
+                self.advance();
+                while matches!(self.current(), Token::Dot) {
+                    self.advance();
+                    if let Token::Identifier(part) = self.current().clone() {
+                        path.push('.');
+                        path.push_str(&part);
+                        self.advance();
+                    }
+                }
+                path
+            }
+            _ => return Err("[VERD ERROR] Expected path after 'use'".to_string()),
+        };
+        Ok(Expr::Use { path })
     }
 
     fn parse_cycle(&mut self) -> Result<Expr, String> {
@@ -262,6 +287,47 @@ impl Parser {
         Ok(expr)
     }
 
+    // parse_postfix handles chained . and [] after a primary
+    fn parse_postfix(&mut self) -> Result<Expr, String> {
+        let mut expr = self.parse_primary()?;
+
+        loop {
+            match self.current() {
+                Token::Dot => {
+                    self.advance(); // consume '.'
+                    let field = self.expect_identifier()?;
+                    // method call: obj.method(args)
+                    if matches!(self.current(), Token::LParen) {
+                        self.advance();
+                        let mut args = Vec::new();
+                        while !matches!(self.current(), Token::RParen | Token::Eof) {
+                            args.push(self.parse_expr()?);
+                            if matches!(self.current(), Token::Comma) { self.advance(); }
+                        }
+                        self.expect(&Token::RParen)?;
+                        // .each |x| { body }  — special lambda form
+                        if field == "each" {
+                            // args already consumed above; expect |param| { body }
+                            // actually parse_each separately
+                        }
+                        expr = Expr::MethodCall { object: Box::new(expr), method: field, args };
+                    } else {
+                        // field access: obj.field
+                        expr = Expr::Field { object: Box::new(expr), field };
+                    }
+                }
+                Token::LBracket => {
+                    self.advance(); // consume '['
+                    let index = self.parse_expr()?;
+                    self.expect(&Token::RBracket)?;
+                    expr = Expr::Index { object: Box::new(expr), index: Box::new(index) };
+                }
+                _ => break,
+            }
+        }
+        Ok(expr)
+    }
+
     fn parse_comparison(&mut self) -> Result<Expr, String> {
         let mut left = self.parse_additive()?;
 
@@ -299,7 +365,7 @@ impl Parser {
     }
 
     fn parse_multiplicative(&mut self) -> Result<Expr, String> {
-        let mut left = self.parse_primary()?;
+        let mut left = self.parse_postfix()?;
 
         loop {
             let op = match self.current() {
@@ -309,7 +375,7 @@ impl Parser {
                 _              => break,
             };
             self.advance();
-            let right = self.parse_primary()?;
+            let right = self.parse_postfix()?;
             left = Expr::BinaryOp { op, left: Box::new(left), right: Box::new(right) };
         }
         Ok(left)
@@ -322,18 +388,67 @@ impl Parser {
             Token::Bool(b)   => { self.advance(); Ok(Expr::Bool(b)) }
             Token::None      => { self.advance(); Ok(Expr::None) }
 
+            // Array literal: [expr, expr, ...]
+            Token::LBracket => {
+                self.advance();
+                let mut elements = Vec::new();
+                self.skip_newlines();
+                while !matches!(self.current(), Token::RBracket | Token::Eof) {
+                    elements.push(self.parse_expr()?);
+                    self.skip_newlines();
+                    if matches!(self.current(), Token::Comma) {
+                        self.advance();
+                        self.skip_newlines();
+                    }
+                }
+                self.expect(&Token::RBracket)?;
+                Ok(Expr::Array { elements })
+            }
+
+            // Map literal: { key: value, ... }
+            // We only parse as map if current is LBrace and next token is Identifier followed by Colon
+            Token::LBrace => {
+                // Peek ahead: if it's `{ ident :` pattern, treat as map
+                let is_map = self.tokens.get(self.pos + 1)
+                    .map(|t| matches!(&t.token, Token::Identifier(_)))
+                    .unwrap_or(false)
+                    && self.tokens.get(self.pos + 2)
+                    .map(|t| matches!(&t.token, Token::Colon))
+                    .unwrap_or(false);
+
+                if is_map {
+                    self.advance(); // consume '{'
+                    let mut pairs = Vec::new();
+                    self.skip_newlines();
+                    while !matches!(self.current(), Token::RBrace | Token::Eof) {
+                        let key = self.expect_identifier()?;
+                        self.expect(&Token::Colon)?;
+                        let val = self.parse_expr()?;
+                        pairs.push((key, val));
+                        self.skip_newlines();
+                        if matches!(self.current(), Token::Comma) {
+                            self.advance();
+                            self.skip_newlines();
+                        }
+                    }
+                    self.expect(&Token::RBrace)?;
+                    Ok(Expr::Map { pairs })
+                } else {
+                    let t = self.current_spanned();
+                    Err(format!("[VERD ERROR] {}:{} — unexpected '{{'  (did you mean an op body?)", t.line, t.col))
+                }
+            }
+
             Token::Some => {
                 self.advance();
                 self.expect(&Token::LParen)?;
                 let inner = self.parse_expr()?;
                 self.expect(&Token::RParen)?;
-                // Represent some(x) as a Call for now
                 Ok(Expr::Call { name: "some".to_string(), args: vec![inner] })
             }
 
             Token::Identifier(name) => {
                 self.advance();
-                // Function call?
                 if matches!(self.current(), Token::LParen) {
                     self.advance();
                     let mut args = Vec::new();

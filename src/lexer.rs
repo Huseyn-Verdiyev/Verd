@@ -176,11 +176,13 @@ impl Lexer {
                 '"'        => self.scan_text(line, col),
                 c if c.is_alphabetic() || c == '_' => self.scan_identifier_or_keyword(line, col),
 
-                '(' => { self.advance(); self.make_token(Token::LParen,  line, col) }
-                ')' => { self.advance(); self.make_token(Token::RParen,  line, col) }
-                '{' => { self.advance(); self.make_token(Token::LBrace,  line, col) }
-                '}' => { self.advance(); self.make_token(Token::RBrace,  line, col) }
-                ',' => { self.advance(); self.make_token(Token::Comma,   line, col) }
+                '(' => { self.advance(); self.make_token(Token::LParen,    line, col) }
+                ')' => { self.advance(); self.make_token(Token::RParen,    line, col) }
+                '{' => { self.advance(); self.make_token(Token::LBrace,    line, col) }
+                '}' => { self.advance(); self.make_token(Token::RBrace,    line, col) }
+                '[' => { self.advance(); self.make_token(Token::LBracket,  line, col) }
+                ']' => { self.advance(); self.make_token(Token::RBracket,  line, col) }
+                ',' => { self.advance(); self.make_token(Token::Comma,     line, col) }
                 '+' => { self.advance(); self.make_token(Token::Plus,    line, col) }
                 '-' => {
                     self.advance();
@@ -203,8 +205,8 @@ impl Lexer {
                         self.advance();
                         self.make_token(Token::Pipe, line, col)
                     } else {
-                        // bare '|' — not defined yet, skip
-                        continue;
+                        // bare '|' — used for lambda params in .each |x| { }
+                        self.make_token(Token::Pipe2, line, col)
                     }
                 }
 
@@ -257,6 +259,9 @@ impl Lexer {
                         self.make_token(Token::Gt, line, col)
                     }
                 }
+
+                // Dot — field access / method call
+                '.' => { self.advance(); self.make_token(Token::Dot, line, col) }
 
                 // Unknown character — skip silently for now
                 _ => { self.advance(); continue; }

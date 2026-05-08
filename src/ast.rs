@@ -90,6 +90,30 @@ pub enum Expr {
     // === Spawn / Sync ===
     Spawn { call: Box<Expr>, handle: String },
     Sync  { handle: String },
+
+    // === Array literal ===
+    // [1, 2, 3]  or  ["a", "b"]
+    Array { elements: Vec<Expr> },
+
+    // === Map literal ===
+    // { name: "Huseyn", age: 15 }
+    Map { pairs: Vec<(String, Expr)> },
+
+    // === Index access ===
+    // arr[0]  or  map["key"]
+    Index { object: Box<Expr>, index: Box<Expr> },
+
+    // === Field access ===
+    // arr.len  or  user.name
+    Field { object: Box<Expr>, field: String },
+
+    // === Method call ===
+    // arr.push(x)  or  str.upper()
+    MethodCall { object: Box<Expr>, method: String, args: Vec<Expr> },
+
+    // === Use (import) ===
+    // use "./math.verd"  or  use std.fs
+    Use { path: String },
 }
 
 /// Binary operator kinds.

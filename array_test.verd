@@ -1,0 +1,48 @@
+// ==========================================
+// Verd — Array & Map Test Suite
+// ==========================================
+
+print("=== 1. Array yaratmaq ===")
+pin ededler = [10, 20, 30, 40, 50]
+print("Array:", ededler)
+print("Birinci element:", ededler[0])
+print("Ucuncu element:", ededler[2])
+print("Uzunluq:", ededler.len)
+
+print("=== 2. Text metodları ===")
+pin ad = "Huseyn Verdiyev"
+print("Böyük hərflər:", ad.upper())
+print("Kiçik hərflər:", ad.lower())
+print("Uzunluq:", ad.len)
+print("'Verd' varmı?:", ad.contains("Verd"))
+
+print("=== 3. Map (Lüğət) ===")
+pin user = { ad: "Huseyn", yas: 15, dil: "Verd" }
+print("Ad:", user.ad)
+print("Yaş:", user.yas)
+print("Dil:", user.dil)
+
+print("=== 4. Array üzərindən Cycle ===")
+flux i = 0
+flux cem = 0
+cycle i < ededler.len {
+    cem = cem + ededler[i]
+    i = i + 1
+}
+print("Cəm:", cem)
+
+print("=== 5. String split ===")
+pin csv = "Huseyn,Verd,Rust,Python"
+pin hisseler = csv.split(",")
+print("Hissələr:", hisseler)
+print("İlki:", hisseler[0])
+print("Sonuncusu:", hisseler[3])
+
+print("=== 6. starts_with ===")
+pin fayl = "main.verd"
+fayl.starts_with("main") ? {
+    print("Verd faylıdır!")
+}
+
+print("")
+print("✅ Array & Map testlər tamamlandı!")

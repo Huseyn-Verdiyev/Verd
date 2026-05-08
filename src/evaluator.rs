@@ -17,6 +17,10 @@ pub enum Value {
         effects: Vec<String>,
         body:    Vec<Expr>,
     },
+
+    // Collection types
+    Array(Vec<Value>),
+    Map(HashMap<String, Value>),
 }
 
 impl std::fmt::Display for Value {
@@ -32,6 +36,16 @@ impl std::fmt::Display for Value {
             Value::None      => write!(f, "none"),
             Value::Void      => Ok(()),
             Value::Op { .. } => write!(f, "<op>"),
+            Value::Array(els) => {
+                let parts: Vec<String> = els.iter().map(|v| v.to_string()).collect();
+                write!(f, "[{}]", parts.join(", "))
+            }
+            Value::Map(m) => {
+                let parts: Vec<String> = m.iter()
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect();
+                write!(f, "{{ {} }}", parts.join(", "))
+            }
         }
     }
 }
@@ -367,19 +381,132 @@ impl Evaluator {
             }
 
             Expr::Spawn { call, handle } => {
-                // For now, spawn just evaluates immediately (no true threading yet)
                 let val = self.eval_value(call)?;
                 self.env.declare(handle, val);
                 Ok(Signal::Value(Value::Void))
             }
 
             Expr::Sync { handle } => {
-                // Just reads the handle variable
                 match self.env.get(handle).cloned() {
                     Some(v) => Ok(Signal::Value(v)),
                     None    => Err(format!("[VERD ERROR] spawn handle '{}' not found.", handle)),
                 }
             }
+
+            // ── Array literal ────────────────────────────────────────────
+            Expr::Array { elements } => {
+                let mut vals = Vec::new();
+                for el in elements {
+                    vals.push(self.eval_value(el)?);
+                }
+                Ok(Signal::Value(Value::Array(vals)))
+            }
+
+            // ── Map literal ──────────────────────────────────────────────
+            Expr::Map { pairs } => {
+                let mut map = HashMap::new();
+                for (key, val_expr) in pairs {
+                    let val = self.eval_value(val_expr)?;
+                    map.insert(key.clone(), val);
+                }
+                Ok(Signal::Value(Value::Map(map)))
+            }
+
+            // ── Index access: arr[i] or map["key"] ──────────────────────
+            Expr::Index { object, index } => {
+                let obj = self.eval_value(object)?;
+                let idx = self.eval_value(index)?;
+                match (obj, idx) {
+                    (Value::Array(arr), Value::Number(n)) => {
+                        let i = n as usize;
+                        arr.get(i).cloned()
+                            .map(|v| Signal::Value(v))
+                            .ok_or_else(|| format!("[VERD ERROR] Array index {} out of bounds (len {})", i, arr.len()))
+                    }
+                    (Value::Map(m), Value::Text(key)) => {
+                        m.get(&key).cloned()
+                            .map(|v| Signal::Value(v))
+                            .ok_or_else(|| format!("[VERD ERROR] Map key '{}' not found", key))
+                    }
+                    (obj, idx) => Err(format!("[VERD ERROR] Cannot index {:?} with {:?}", obj, idx)),
+                }
+            }
+
+            // ── Field access: obj.field ──────────────────────────────────
+            Expr::Field { object, field } => {
+                let obj = self.eval_value(object)?;
+                match &obj {
+                    Value::Array(arr) => match field.as_str() {
+                        "len" => Ok(Signal::Value(Value::Number(arr.len() as f64))),
+                        f => Err(format!("[VERD ERROR] Array has no field '{}'", f)),
+                    },
+                    Value::Map(m) => {
+                        m.get(field.as_str()).cloned()
+                            .map(|v| Signal::Value(v))
+                            .ok_or_else(|| format!("[VERD ERROR] Map has no field '{}'", field))
+                    }
+                    Value::Text(s) => match field.as_str() {
+                        "len" => Ok(Signal::Value(Value::Number(s.len() as f64))),
+                        f => Err(format!("[VERD ERROR] Text has no field '{}'", f)),
+                    },
+                    other => Err(format!("[VERD ERROR] {:?} has no field '{}'", other, field)),
+                }
+            }
+
+            // ── Method call: obj.method(args) ────────────────────────────
+            Expr::MethodCall { object, method, args } => {
+                let obj_val = self.eval_value(object)?;
+                let arg_vals: Result<Vec<_>, _> = args.iter().map(|a| self.eval_value(a)).collect();
+                let arg_vals = arg_vals?;
+
+                match (obj_val, method.as_str()) {
+                    // Array methods
+                    (Value::Array(mut arr), "push") => {
+                        if let Some(v) = arg_vals.into_iter().next() { arr.push(v); }
+                        // We need to write back — find the name in env
+                        // For now return the mutated array; assignment handles write-back
+                        Ok(Signal::Value(Value::Array(arr)))
+                    }
+                    (Value::Array(mut arr), "pop") => {
+                        let v = arr.pop().unwrap_or(Value::None);
+                        Ok(Signal::Value(v))
+                    }
+                    (Value::Array(arr), "contains") => {
+                        let target = arg_vals.into_iter().next().unwrap_or(Value::None);
+                        let found = arr.iter().any(|v| v.to_string() == target.to_string());
+                        Ok(Signal::Value(Value::Bool(found)))
+                    }
+                    (Value::Array(arr), "first") => {
+                        Ok(Signal::Value(arr.first().cloned().unwrap_or(Value::None)))
+                    }
+                    (Value::Array(arr), "last") => {
+                        Ok(Signal::Value(arr.last().cloned().unwrap_or(Value::None)))
+                    }
+                    // Text methods
+                    (Value::Text(s), "upper") => Ok(Signal::Value(Value::Text(s.to_uppercase()))),
+                    (Value::Text(s), "lower") => Ok(Signal::Value(Value::Text(s.to_lowercase()))),
+                    (Value::Text(s), "trim")  => Ok(Signal::Value(Value::Text(s.trim().to_string()))),
+                    (Value::Text(s), "len")   => Ok(Signal::Value(Value::Number(s.len() as f64))),
+                    (Value::Text(s), "contains") => {
+                        let pat = arg_vals.into_iter().next().unwrap_or(Value::None).to_string();
+                        Ok(Signal::Value(Value::Bool(s.contains(&pat))))
+                    }
+                    (Value::Text(s), "starts_with") => {
+                        let pat = arg_vals.into_iter().next().unwrap_or(Value::None).to_string();
+                        Ok(Signal::Value(Value::Bool(s.starts_with(&pat))))
+                    }
+                    (Value::Text(s), "split") => {
+                        let sep = arg_vals.into_iter().next().unwrap_or(Value::Text(",".into())).to_string();
+                        let parts: Vec<Value> = s.split(&sep as &str)
+                            .map(|p| Value::Text(p.to_string())).collect();
+                        Ok(Signal::Value(Value::Array(parts)))
+                    }
+                    (obj, m) => Err(format!("[VERD ERROR] {:?} has no method '{}'", obj, m)),
+                }
+            }
+
+            // ── use (import) — handled by resolver; skip at eval time ────
+            Expr::Use { .. } => Ok(Signal::Value(Value::Void)),
         }
     }
 

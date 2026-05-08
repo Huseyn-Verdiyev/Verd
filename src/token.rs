@@ -50,7 +50,11 @@ pub enum Token {
     RParen,             // )
     LBrace,             // {
     RBrace,             // }
+    LBracket,           // [
+    RBracket,           // ]
     Comma,              // ,
+    Dot,                // .  (field access / method call)
+    Pipe2,              // |  (lambda param in .each |x| { })
 
     // === Special ===
     Newline,            // end of logical line
