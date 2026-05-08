@@ -1,0 +1,98 @@
+// ─────────────────────────────────────────────
+//  Verd 0.1.0 — Full Feature Test
+// ─────────────────────────────────────────────
+
+print("=== 1. Variables ===")
+pin language = "Verd"
+flux version = 1
+print("Language:", language)
+print("Version:", version)
+version = version + 1
+print("Updated version:", version)
+
+print("")
+print("=== 2. Arithmetic ===")
+pin a = 20
+pin b = 4
+print("20 + 4 =", a + b)
+print("20 - 4 =", a - b)
+print("20 * 4 =", a * b)
+print("20 / 4 =", a / b)
+print("20 % 6 =", 20 % 6)
+
+print("")
+print("=== 3. Op (Function) ===")
+op square(n) {
+    yield n * n
+}
+op power_sum(x, y) {
+    yield square(x) + square(y)
+}
+print("square(7) =", square(7))
+print("power_sum(3, 4) =", power_sum(3, 4))
+
+print("")
+print("=== 4. Cycle (Loop) ===")
+flux i = 1
+flux total = 0
+cycle i < 6 {
+    total = total + i
+    i = i + 1
+}
+print("Sum of 1 to 5 =", total)
+
+print("")
+print("=== 5. Pipeline |> ===")
+op double(n) {
+    yield n + n
+}
+op add_ten(n) {
+    yield n + 10
+}
+5 |> double |> add_ten |> print
+
+print("")
+print("=== 6. match / some / none ===")
+op find_user(id) {
+    yield some("Huseyn")
+}
+op find_missing(id) {
+    yield none
+}
+
+find_user(1) match {
+    some(name) -> print("Found:", name)
+    none       -> print("Not found")
+}
+
+find_missing(99) match {
+    some(name) -> print("Found:", name)
+    none       -> print("Not found")
+}
+
+print("")
+print("=== 7. rise / catch ===")
+op safe_divide(x, y) {
+    yield x / y
+}
+
+op bad_divide() {
+    rise "ZeroDivision: cannot divide by zero"
+}
+
+print("10 / 2 =", safe_divide(10, 2))
+
+bad_divide() catch err {
+    print("Caught error:", err)
+}
+
+print("")
+print("=== 8. String operations ===")
+op greet(who) {
+    yield "Hello, " + who + "!"
+}
+"Verd" |> greet |> print
+"World" |> greet |> print
+
+print("")
+print("All tests passed!")
