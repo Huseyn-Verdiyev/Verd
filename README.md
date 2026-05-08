@@ -1,187 +1,159 @@
-# Verd
+<div align="center">
+  <h1><code>Verd</code></h1>
+  <p>
+    <strong>A next-generation, effect-transparent systems language that compiles to native machine code.</strong>
+  </p>
+  <p>
+    Python's simplicity. C's speed. Rust's safety. Zero compromises.
+  </p>
 
-**Verd** is a statically-compiled, effect-transparent programming language written from scratch in Rust.
+  <!-- Badges -->
+  <img src="https://img.shields.io/badge/Status-Alpha-orange?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/Architecture-AOT_Transpiler-blue?style=for-the-badge" alt="Architecture" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License" />
+</div>
 
-It transpiles to native Rust code and is compiled with `rustc -O3`, giving it performance comparable to C and Rust — while keeping a clean, minimal syntax with no semicolons and no hidden magic.
+<br/>
 
-> *Built by a 15-year-old systems engineer as a fully standalone language project.*
+## The Problem with Modern Languages
+
+You usually have to pick your poison:
+1. Write in **C/C++** and achieve maximum performance, but deal with memory leaks, segfaults, and unreadable pointer arithmetic.
+2. Write in **Rust** and get speed with memory safety, but spend months fighting the Borrow Checker and waiting for slow compilation.
+3. Write in **Python** and enjoy beautiful, rapid development, but sacrifice 99% of CPU performance and deal with runtime `NoneType` crashes.
+
+## Enter Verd
+
+**Verd** is a statically-compiled, ahead-of-time (AOT) systems programming language. It is designed from the ground up to eliminate these tradeoffs. 
+
+Verd transpiles your human-readable code into memory-safe Rust under the hood, and compiles it via `rustc -O3` into a blazing-fast native binary. 
+
+### Core Tenets
+
+- **Zero-Hidden-Allocation:** No heavy, background Garbage Collector (GC) pausing your threads. 
+- **Absolute Null-Safety:** The concept of `null` does not exist. Values are either guaranteed to exist or wrapped in `some/none`.
+- **Strict Effect Transparency:** Silent side-effects are illegal. If a function mutates global or outer scope state, it must explicitly declare it with `!flux`.
+- **Pipeline Architecture:** Data flows forward. `data |> process |> display` replaces deeply nested function calls.
 
 ---
 
-## Why Verd?
+## ⚡ Performance Matrix
 
-Every language today makes a tradeoff: either you get **speed** (C, Rust) or you get **simplicity** (Python, JavaScript). Verd refuses this tradeoff.
-
-| Feature | C | Python | Rust | **Verd** |
-|---|:---:|:---:|:---:|:---:|
-| Native speed | ✅ | ❌ | ✅ | ✅ |
-| Simple syntax | ❌ | ✅ | ❌ | ✅ |
-| No hidden GC | ✅ | ❌ | ✅ | ✅ |
-| Effect transparency | ❌ | ❌ | ❌ | ✅ |
-| No null crashes | ❌ | ❌ | ✅ | ✅ |
-
-### Verd's Core Philosophy
-
-**Effect Transparency** — In Verd, no function can silently mutate external state. If an `op` modifies an outer variable, it must declare it explicitly with `!flux(...)`. This eliminates the #1 cause of bugs in large codebases.
-
-**No Null** — `null` does not exist. Verd uses `some(x) | none` with mandatory `match` handling. If you don't handle the `none` case, it's a compile-time error.
-
-**Readable, Minimal Syntax** — No semicolons. No boilerplate. Keywords designed to express intent, not mimic C.
+| Metric | Python | C++ | Rust | Java (JVM) | **Verd** |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Execution Speed** | Very Slow | **Max** | **Max** | Fast | **Max** |
+| **Cognitive Load** | Low | High | Very High | Medium | **Low** |
+| **Null Safety** | ❌ | ❌ | ✅ | ❌ | **✅** |
+| **Memory Safety** | ✅ | ❌ | ✅ | ✅ | **✅** |
+| **GC Pauses** | Yes | No | No | Yes | **No** |
 
 ---
 
-## Syntax
+## 📖 Syntax & Features
 
-```verd
-// Immutable variable
-pin name = "Verd"
+Verd's syntax is mathematically minimal. No semicolons, no curly brace hell, no boilerplate. 
 
-// Mutable variable
-flux counter = 0
+### Variables & Mutability
+By default, everything is immutable (`pin`). To mutate, you must explicitly declare a `flux`.
+```rust
+pin language = "Verd"
+flux version = 1
 
-// Operation (function)
-op greet(who) {
-    yield "Hello, " + who + "!"
+version = version + 1
+```
+
+### The Pipeline Operator
+Eliminate ugly nested function calls. Push data forward through the pipeline.
+```rust
+op double(n) { yield n * 2 }
+op add_ten(n) { yield n + 10 }
+
+// Instead of: print(add_ten(double(5)))
+5 |> double |> add_ten |> print
+```
+
+### Absolute Null Safety
+Verd forces you to handle missing data at compile time.
+```rust
+op fetch_user(id) {
+    id == 1 ? { yield some("Huseyn") }
+    yield none
 }
 
-// Pipeline operator
-"World" |> greet |> print
-
-// Cycle (loop)
-cycle counter < 5 {
-    counter = counter + 1
+fetch_user(1) match {
+    some(name) -> print("Welcome,", name)
+    none       -> print("User not found in DB.")
 }
+```
 
-// Optional values — no null
-op find_user(id) {
-    yield some("Huseyn")
-}
-
-find_user(1) match {
-    some(name) -> print("Found:", name)
-    none       -> print("Not found")
-}
-
-// Error handling
-op divide(x, y) {
-    rise "ZeroDivision: cannot divide by zero"
+### Graceful Error Handling
+No silent crashes. Catch explicitly or the compiler will panic safely.
+```rust
+op divide(a, b) {
+    b == 0 ? { rise "Critical: Division by Zero" }
+    yield a / b
 }
 
 divide(10, 0) catch err {
-    print("Caught:", err)
+    print("Recovered from error:", err)
 }
 ```
 
 ---
 
-## Keyword Map
+## 🚀 Getting Started
 
-| Concept | Other Languages | Verd |
-|---|---|---|
-| Immutable variable | `let / const` | `pin` |
-| Mutable variable | `var / mut` | `flux` |
-| Function | `fn / def` | `op` |
-| Loop | `while / for` | `cycle` |
-| Return | `return` | `yield` |
-| Throw error | `throw / raise` | `rise` |
-| Catch error | `catch / except` | `catch` |
-| Pipeline | (none) | `\|>` |
-| Optional value | `Optional / None` | `some(x) \| none` |
+Verd is built on top of the Rust toolchain. Ensure you have [Rust](https://rustup.rs/) installed before proceeding.
 
----
-
-## Architecture
-
-Verd is a **Ahead-of-Time (AOT) transpiler** — it compiles to native binaries via Rust.
-
-```
-Source (.verd)
-    ↓
-  Lexer        → Tokenizes source into typed tokens
-    ↓
-  Parser       → Builds Abstract Syntax Tree (AST)
-    ↓
-  Rust Generator → Emits type-safe Rust source code
-    ↓
-  rustc -O3   → Compiles to native binary
-    ↓
-  ./program    → Runs at full native speed
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-- [Rust](https://rustup.rs/) (for building Verd and compiling generated code)
-
-### Build
+### Installation
 
 ```bash
+# Clone the compiler source
 git clone https://github.com/Huseyn-Verdiyev/Verd.git
 cd Verd
+
+# Build the Verd compiler
 cargo build --release
 ```
 
 ### Usage
 
+The `verd` executable provides a complete toolchain: REPL, Interpreter, and AOT Compiler.
+
 ```bash
-# Interpret (fast dev cycle, no compilation step)
-verd run hello.verd
-
-# Compile to native binary
-verd compile hello.verd hello
-
-# Run the binary
-./hello
-
-# Inspect generated Rust code
-verd emit-rust hello.verd
-
-# Interactive REPL
+# 1. Interactive REPL (Fast prototyping)
 verd
+
+# 2. Interpret a file (No compilation overhead)
+verd run main.verd
+
+# 3. Compile to Native Binary (Production mode, rustc -O3)
+verd compile main.verd output_binary
+
+# Execute the resulting binary
+./output_binary
+
+# Debugging: See the generated transpiled Rust code
+verd emit-rust main.verd
 ```
 
 ---
 
-## Project Structure
+## 🏗️ Architecture
 
-```
-src/
-  main.rs          — CLI entry point (run / compile / emit-rust / REPL)
-  token.rs         — Token definitions
-  lexer.rs         — Character-by-character tokenizer
-  ast.rs           — Abstract Syntax Tree node types
-  parser.rs        — Recursive-descent parser
-  evaluator.rs     — Tree-walking interpreter (for REPL / fast iteration)
-  rust_generator.rs — AOT Rust code generator (for native compilation)
-  c_generator.rs   — C code generator (experimental backend)
-```
+Verd is a true compiler pipeline, not just a script runner.
+
+1. **Lexer:** Scans raw `.verd` text into a stream of typed Tokens.
+2. **Parser:** Uses recursive-descent to construct a strict Abstract Syntax Tree (AST).
+3. **Rust Transpiler:** Analyzes the AST and generates 100% memory-safe, zero-overhead Rust code.
+4. **Native Compilation:** Invokes the host's `rustc` with `-O3` (Level 3 Optimization) to strip debug symbols and output a highly optimized `.exe` / ELF binary.
 
 ---
 
-## Roadmap
+## 📜 License
+Distributed under the **MIT License**. Free to use, modify, and distribute.
 
-- [x] Lexer (tokenizer)
-- [x] Parser (recursive-descent, full AST)
-- [x] Tree-walking interpreter + REPL
-- [x] AOT Rust transpiler (native binary via rustc -O3)
-- [x] `pin` / `flux` / `op` / `cycle` / `yield`
-- [x] `some` / `none` / `match` (no-null system)
-- [x] `rise` / `catch` (error handling)
-- [x] `|>` pipeline operator
-- [ ] Standard library (`use fs`, `use net`, `use math`)
-- [ ] Static type inference
-- [ ] Structs and records
-- [ ] Closures
-- [ ] Package manager (`verd add`)
-
----
-
-## License
-
-MIT — free to use, modify and distribute.
-
----
-
-*Verd is a personal research project exploring language design and compiler construction from first principles.*
+<br/>
+<div align="center">
+  <sub>Built with engineering precision by Huseyn Verdiyev.</sub>
+</div>
