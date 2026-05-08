@@ -248,7 +248,18 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Result<Expr, String> {
-        self.parse_comparison()
+        self.parse_question()
+    }
+
+    fn parse_question(&mut self) -> Result<Expr, String> {
+        let expr = self.parse_comparison()?;
+
+        if matches!(self.current(), Token::Question) {
+            self.advance();
+            let body = self.parse_block()?;
+            return Ok(Expr::Question { condition: Box::new(expr), body });
+        }
+        Ok(expr)
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, String> {
@@ -288,7 +299,7 @@ impl Parser {
     }
 
     fn parse_multiplicative(&mut self) -> Result<Expr, String> {
-        let mut left = self.parse_question()?;
+        let mut left = self.parse_primary()?;
 
         loop {
             let op = match self.current() {
@@ -298,21 +309,10 @@ impl Parser {
                 _              => break,
             };
             self.advance();
-            let right = self.parse_question()?;
+            let right = self.parse_primary()?;
             left = Expr::BinaryOp { op, left: Box::new(left), right: Box::new(right) };
         }
         Ok(left)
-    }
-
-    fn parse_question(&mut self) -> Result<Expr, String> {
-        let expr = self.parse_primary()?;
-
-        if matches!(self.current(), Token::Question) {
-            self.advance();
-            let body = self.parse_block()?;
-            return Ok(Expr::Question { condition: Box::new(expr), body });
-        }
-        Ok(expr)
     }
 
     fn parse_primary(&mut self) -> Result<Expr, String> {

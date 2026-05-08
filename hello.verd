@@ -1,0 +1,56 @@
+// ==========================================
+// Verd Language Demo
+// ==========================================
+
+print("🚀 Verd Mühitinə Xoş Gəldin, Huseyn!")
+print("--------------------------------------")
+
+// 1. Dəyişənlər və Dövr (Cycle)
+flux fib_a = 0
+flux fib_b = 1
+flux i = 0
+
+print("İlk 10 Fibonacci rəqəmi:")
+cycle i < 10 {
+    print(fib_a)
+    flux temp = fib_a + fib_b
+    fib_a = fib_b
+    fib_b = temp
+    i = i + 1
+}
+print("--------------------------------------")
+
+// 2. Təhlükəsizlik: Null yoxdur (some/none)
+op axtar(ad) {
+    ad == "Huseyn" ? { yield some("Sistem Mühəndisi") }
+    yield none
+}
+
+print("Axtarış nəticəsi:")
+axtar("Huseyn") match {
+    some(vezife) -> print("Tapıldı! Vəzifə:", vezife)
+    none         -> print("İstifadəçi tapılmadı.")
+}
+print("--------------------------------------")
+
+// 3. Pipeline |> (Funksiyaları zəncirləmək)
+op vur_iki(x) { yield x * 2 }
+op ustune_on_gel(x) { yield x + 10 }
+
+print("Pipeline Testi (5 |> vur_iki |> ustune_on_gel):")
+5 |> vur_iki |> ustune_on_gel |> print
+print("--------------------------------------")
+
+// 4. Error Handling (Xəta yoxlanışı)
+op bolme(a, b) {
+    b == 0 ? { rise "Sıfıra bölmə xətası!" }
+    yield a / b
+}
+
+print("Xəta Yoxlanışı (100 / 0):")
+bolme(100, 0) catch err {
+    print("Xəta yaxalandı:", err)
+}
+
+print("--------------------------------------")
+print("✅ Bütün testlər uğurla keçdi!")
