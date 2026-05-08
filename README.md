@@ -6,6 +6,9 @@
   <p>
     Python's simplicity. C's speed. Rust's safety. Zero compromises.
   </p>
+  <p>
+    <em>Built by <strong>Huseyn Verdiyev</strong>, a 15-year-old systems engineer, as a fully standalone compiler project.</em>
+  </p>
 
   <!-- Badges -->
   <img src="https://img.shields.io/badge/Status-Alpha-orange?style=for-the-badge" alt="Status" />
