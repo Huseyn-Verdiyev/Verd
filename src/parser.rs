@@ -470,6 +470,23 @@ impl Parser {
                 Ok(e)
             }
 
+            // Unary minus: -expr
+            Token::Minus => {
+                self.advance();
+                let e = self.parse_postfix()?;
+                // Fold constant negative numbers
+                if let Expr::Number(n) = e {
+                    Ok(Expr::Number(-n))
+                } else {
+                    // Represent as 0 - expr
+                    Ok(Expr::BinaryOp {
+                        op: crate::ast::BinOp::Sub,
+                        left: Box::new(Expr::Number(0.0)),
+                        right: Box::new(e),
+                    })
+                }
+            }
+
             other => {
                 let t = self.current_spanned();
                 Err(format!(

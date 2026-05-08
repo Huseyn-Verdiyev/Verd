@@ -197,6 +197,24 @@ impl Evaluator {
                     return Ok(Signal::Value(Value::Void));
                 }
 
+                // Built-in: input(prompt)
+                if name == "input" {
+                    use std::io::{self, Write};
+                    if let Some(prompt) = args.first() {
+                        let p = self.eval_value(prompt)?;
+                        print!("{}", p);
+                        io::stdout().flush().ok();
+                    }
+                    let mut line = String::new();
+                    io::stdin().read_line(&mut line).ok();
+                    return Ok(Signal::Value(Value::Text(line.trim().to_string())));
+                }
+
+                // Stdlib namespace calls: fs.read(...), math.sqrt(...) etc.
+                if let Some(result) = self.try_stdlib_call(name, args)? {
+                    return Ok(Signal::Value(result));
+                }
+
                 // Built-in: some(x)
                 if name == "some" && args.len() == 1 {
                     let inner = self.eval_value(&args[0])?;
@@ -434,6 +452,18 @@ impl Evaluator {
 
             // ── Field access: obj.field ──────────────────────────────────
             Expr::Field { object, field } => {
+                // Check if object is a stdlib namespace constant: math.pi, math.e
+                if let Expr::Identifier(ns) = object.as_ref() {
+                    let stdlib_namespaces = ["math", "fs", "str", "io"];
+                    if stdlib_namespaces.contains(&ns.as_str()) {
+                        let full_name = format!("{}.{}", ns, field);
+                        // Pass empty args slice for constants
+                        if let Some(result) = self.try_stdlib_call(&full_name, &[])? {
+                            return Ok(Signal::Value(result));
+                        }
+                    }
+                }
+
                 let obj = self.eval_value(object)?;
                 match &obj {
                     Value::Array(arr) => match field.as_str() {
@@ -455,6 +485,17 @@ impl Evaluator {
 
             // ── Method call: obj.method(args) ────────────────────────────
             Expr::MethodCall { object, method, args } => {
+                // Check if object is a stdlib namespace: math.sqrt(x), fs.read(x)
+                if let Expr::Identifier(ns) = object.as_ref() {
+                    let stdlib_namespaces = ["math", "fs", "str", "io"];
+                    if stdlib_namespaces.contains(&ns.as_str()) {
+                        let full_name = format!("{}.{}", ns, method);
+                        if let Some(result) = self.try_stdlib_call(&full_name, args)? {
+                            return Ok(Signal::Value(result));
+                        }
+                    }
+                }
+
                 let obj_val = self.eval_value(object)?;
                 let arg_vals: Result<Vec<_>, _> = args.iter().map(|a| self.eval_value(a)).collect();
                 let arg_vals = arg_vals?;
@@ -505,8 +546,11 @@ impl Evaluator {
                 }
             }
 
-            // ── use (import) — handled by resolver; skip at eval time ────
-            Expr::Use { .. } => Ok(Signal::Value(Value::Void)),
+            // ── use (import) — load stdlib modules into scope ────────
+            Expr::Use { path } => {
+                self.load_stdlib_if_needed(path);
+                Ok(Signal::Value(Value::Void))
+            }
         }
     }
 
@@ -559,6 +603,148 @@ impl Evaluator {
             (op, l, r) => Err(format!(
                 "[VERD ERROR] Cannot apply {:?} to {:?} and {:?}", op, l, r
             )),
+        }
+    }
+
+    // ── Standard Library ─────────────────────────────────────────────────────
+
+    /// Called when `use std.*` is seen. Currently a no-op since all stdlib
+    /// functions are dispatched dynamically by name in try_stdlib_call.
+    fn load_stdlib_if_needed(&mut self, _path: &str) {
+        // Future: could set a flag to restrict access to only loaded modules.
+        // For now, all std functions are always available once called.
+    }
+
+    /// Try to dispatch a stdlib namespaced call like "fs.read", "math.sqrt".
+    /// Returns Some(Value) if it was a stdlib call, None if it's user-defined.
+    fn try_stdlib_call(&mut self, name: &str, args: &[Expr]) -> Result<Option<Value>, String> {
+        let arg_vals: Result<Vec<_>, _> = args.iter().map(|a| self.eval_value(a)).collect();
+        let arg_vals = arg_vals?;
+
+        let get = |idx: usize, expected: &str| -> Result<String, String> {
+            arg_vals.get(idx)
+                .map(|v| v.to_string())
+                .ok_or_else(|| format!("[VERD ERROR] {} requires argument {}", name, expected))
+        };
+
+        let get_num = |idx: usize, expected: &str| -> Result<f64, String> {
+            match arg_vals.get(idx) {
+                Some(Value::Number(n)) => Ok(*n),
+                _ => Err(format!("[VERD ERROR] {} requires numeric argument '{}'", name, expected)),
+            }
+        };
+
+        match name {
+            // ── fs module ───────────────────────────────────────────────────
+            "fs.read" => {
+                let path = get(0, "path")?;
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("[VERD ERROR] fs.read: {}", e))?;
+                Ok(Some(Value::Text(content)))
+            }
+            "fs.write" => {
+                let path    = get(0, "path")?;
+                let content = get(1, "content")?;
+                std::fs::write(&path, content)
+                    .map_err(|e| format!("[VERD ERROR] fs.write: {}", e))?;
+                Ok(Some(Value::Void))
+            }
+            "fs.exists" => {
+                let path = get(0, "path")?;
+                Ok(Some(Value::Bool(std::path::Path::new(&path).exists())))
+            }
+            "fs.delete" => {
+                let path = get(0, "path")?;
+                std::fs::remove_file(&path)
+                    .map_err(|e| format!("[VERD ERROR] fs.delete: {}", e))?;
+                Ok(Some(Value::Void))
+            }
+            "fs.lines" => {
+                let path = get(0, "path")?;
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("[VERD ERROR] fs.lines: {}", e))?;
+                let lines: Vec<Value> = content.lines()
+                    .map(|l| Value::Text(l.to_string())).collect();
+                Ok(Some(Value::Array(lines)))
+            }
+
+            // ── math module ─────────────────────────────────────────────────
+            "math.sqrt"  => Ok(Some(Value::Number(get_num(0, "n")?.sqrt()))),
+            "math.pow"   => Ok(Some(Value::Number(get_num(0, "base")?.powf(get_num(1, "exp")?)))),
+            "math.abs"   => Ok(Some(Value::Number(get_num(0, "n")?.abs()))),
+            "math.floor" => Ok(Some(Value::Number(get_num(0, "n")?.floor()))),
+            "math.ceil"  => Ok(Some(Value::Number(get_num(0, "n")?.ceil()))),
+            "math.round" => Ok(Some(Value::Number(get_num(0, "n")?.round()))),
+            "math.min"   => Ok(Some(Value::Number(get_num(0, "a")?.min(get_num(1, "b")?)))),
+            "math.max"   => Ok(Some(Value::Number(get_num(0, "a")?.max(get_num(1, "b")?)))),
+            "math.sin"   => Ok(Some(Value::Number(get_num(0, "n")?.sin()))),
+            "math.cos"   => Ok(Some(Value::Number(get_num(0, "n")?.cos()))),
+            "math.log"   => Ok(Some(Value::Number(get_num(0, "n")?.ln()))),
+            "math.log2"  => Ok(Some(Value::Number(get_num(0, "n")?.log2()))),
+            "math.pi"    => Ok(Some(Value::Number(std::f64::consts::PI))),
+            "math.e"     => Ok(Some(Value::Number(std::f64::consts::E))),
+
+            // ── str module ──────────────────────────────────────────────────
+            "str.upper"   => Ok(Some(Value::Text(get(0, "s")?.to_uppercase()))),
+            "str.lower"   => Ok(Some(Value::Text(get(0, "s")?.to_lowercase()))),
+            "str.trim"    => Ok(Some(Value::Text(get(0, "s")?.trim().to_string()))),
+            "str.len"     => Ok(Some(Value::Number(get(0, "s")?.len() as f64))),
+            "str.reverse" => Ok(Some(Value::Text(get(0, "s")?.chars().rev().collect()))),
+            "str.contains" => {
+                let s   = get(0, "s")?;
+                let pat = get(1, "pattern")?;
+                Ok(Some(Value::Bool(s.contains(&pat as &str))))
+            }
+            "str.replace" => {
+                let s    = get(0, "s")?;
+                let from = get(1, "from")?;
+                let to   = get(2, "to")?;
+                Ok(Some(Value::Text(s.replace(&from as &str, &to as &str))))
+            }
+            "str.split" => {
+                let s   = get(0, "s")?;
+                let sep = get(1, "sep")?;
+                let parts: Vec<Value> = s.split(&sep as &str)
+                    .map(|p| Value::Text(p.to_string())).collect();
+                Ok(Some(Value::Array(parts)))
+            }
+            "str.starts_with" => {
+                let s   = get(0, "s")?;
+                let pat = get(1, "pattern")?;
+                Ok(Some(Value::Bool(s.starts_with(&pat as &str))))
+            }
+            "str.ends_with" => {
+                let s   = get(0, "s")?;
+                let pat = get(1, "pattern")?;
+                Ok(Some(Value::Bool(s.ends_with(&pat as &str))))
+            }
+            "str.repeat" => {
+                let s = get(0, "s")?;
+                let n = get_num(1, "n")? as usize;
+                Ok(Some(Value::Text(s.repeat(n))))
+            }
+            "str.to_num" => {
+                let s = get(0, "s")?;
+                match s.trim().parse::<f64>() {
+                    Ok(n)  => Ok(Some(Value::Number(n))),
+                    Err(_) => Ok(Some(Value::None)),
+                }
+            }
+
+            // ── io module ───────────────────────────────────────────────────
+            "io.print"   => {
+                let parts: Vec<String> = arg_vals.iter().map(|v| v.to_string()).collect();
+                print!("{}", parts.join(" "));
+                Ok(Some(Value::Void))
+            }
+            "io.println" => {
+                let parts: Vec<String> = arg_vals.iter().map(|v| v.to_string()).collect();
+                println!("{}", parts.join(" "));
+                Ok(Some(Value::Void))
+            }
+
+            // Not a stdlib call
+            _ => Ok(None),
         }
     }
 }

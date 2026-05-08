@@ -5,12 +5,14 @@ mod parser;
 mod evaluator;
 mod c_generator;
 mod rust_generator;
+mod resolver;
 
 use lexer::Lexer;
 use parser::Parser;
 use evaluator::Evaluator;
 use c_generator::CGenerator;
 use rust_generator::RustGenerator;
+use resolver::Resolver;
 use std::io::{self, Write};
 use std::process::Command;
 
@@ -72,10 +74,19 @@ fn read_file(path: &str) -> String {
 }
 
 fn parse_source(source: &str) -> Vec<ast::Expr> {
+    parse_source_from(source, ".")
+}
+
+fn parse_source_from(source: &str, base_dir: &str) -> Vec<ast::Expr> {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenise();
     let mut parser = Parser::new(tokens);
-    parser.parse().unwrap_or_else(|e| {
+    let ast = parser.parse().unwrap_or_else(|e| {
+        eprintln!("{}", e);
+        std::process::exit(1);
+    });
+    let mut resolver = Resolver::new(base_dir);
+    resolver.resolve(ast).unwrap_or_else(|e| {
         eprintln!("{}", e);
         std::process::exit(1);
     })

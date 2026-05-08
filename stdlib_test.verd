@@ -1,0 +1,45 @@
+// ==========================================
+// Verd — Standart Kitabxana Test Suite
+// ==========================================
+
+use std.fs
+use std.math
+use std.str
+
+print("=== 1. math modulu ===")
+print("sqrt(144) =", math.sqrt(144))
+print("pow(2, 10) =", math.pow(2, 10))
+print("abs(-42) =", math.abs(-42))
+print("floor(3.9) =", math.floor(3.9))
+print("ceil(3.1) =", math.ceil(3.1))
+print("round(3.5) =", math.round(3.5))
+print("min(10, 5) =", math.min(10, 5))
+print("max(10, 5) =", math.max(10, 5))
+print("PI =", math.pi())
+print("E =", math.e())
+
+print("")
+print("=== 2. str modulu ===")
+print("upper =", str.upper("salam verd"))
+print("lower =", str.lower("SALAM VERD"))
+print("reverse =", str.reverse("Huseyn"))
+print("replace =", str.replace("Salam Python", "Python", "Verd"))
+print("contains =", str.contains("Huseyn Verdiyev", "Verd"))
+print("starts_with =", str.starts_with("main.verd", "main"))
+print("ends_with =", str.ends_with("main.verd", ".verd"))
+print("repeat =", str.repeat("Verd! ", 3))
+pin sayi = str.to_num("42")
+print("to_num('42') =", sayi)
+
+print("")
+print("=== 3. fs modulu ===")
+fs.write("test_output.txt", "Salam, Verd faylı!")
+print("Fayl yazıldı: test_output.txt")
+print("Fayl var mı?", fs.exists("test_output.txt"))
+pin mezmun = fs.read("test_output.txt")
+print("Fayl məzmunu:", mezmun)
+fs.delete("test_output.txt")
+print("Fayl silindi. Var mı?", fs.exists("test_output.txt"))
+
+print("")
+print("✅ Standart Kitabxana testlər tamamlandı!")
